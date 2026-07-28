@@ -1,8 +1,42 @@
 import struct
 import os
 import sys
+import subprocess
+
+def pick_file():
+    """Use a-Shell's pickfile to select a video"""
+    print("📂 Opening file picker...")
+    try:
+        result = subprocess.run(["pickfile"], capture_output=True, text=True, timeout=120)
+        if result.returncode == 0 and result.stdout.strip():
+            filepath = result.stdout.strip()
+            print(f"✅ Selected: {os.path.basename(filepath)}")
+            return filepath
+        else:
+            print("❌ No file selected or pickfile failed.")
+            return None
+    except FileNotFoundError:
+        print("❌ 'pickfile' command not available.")
+        return None
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        return None
+
+def get_fps():
+    """Ask user for original FPS"""
+    while True:
+        fps_input = input("🎯 Enter original FPS (e.g., 60): ").strip()
+        try:
+            fps = float(fps_input)
+            if fps > 0:
+                return fps
+            else:
+                print("❌ Must be a positive number!")
+        except ValueError:
+            print("❌ Please enter a valid number!")
 
 def patch_video_fps(input_path, original_fps, target_fps=30.0):
+    """Patch MP4 metadata to change FPS"""
     if original_fps <= 0 or target_fps <= 0:
         print("❌ Error: FPS values must be positive numbers.")
         return None
@@ -11,6 +45,7 @@ def patch_video_fps(input_path, original_fps, target_fps=30.0):
         print("❌ Error: File must be an MP4.")
         return None
 
+    print(f"⏳ Reading file: {os.path.basename(input_path)}")
     try:
         with open(input_path, 'rb') as f:
             data = bytearray(f.read())
@@ -23,6 +58,7 @@ def patch_video_fps(input_path, original_fps, target_fps=30.0):
     pos = 0
     file_size = len(data)
 
+    print("🔧 Patching metadata atoms...")
     while pos < file_size - 8:
         if data[pos:pos+4] == b'mvhd':
             if pos + 20 <= file_size:
@@ -60,10 +96,12 @@ def patch_video_fps(input_path, original_fps, target_fps=30.0):
         print("❌ Error: Could not find mvhd or mdhd atoms in the MP4 file.")
         return None
 
+    # Create output filename
     dir_name = os.path.dirname(input_path)
     base_name = os.path.splitext(os.path.basename(input_path))[0]
-    output_path = os.path.join(dir_name, f"{base_name}_{int(target_fps)}fps.mp4")
+    output_path = os.path.join(dir_name, f"{base_name}_30fps.mp4")
 
+    print("💾 Saving patched file...")
     try:
         with open(output_path, 'wb') as f:
             f.write(data)
@@ -72,85 +110,38 @@ def patch_video_fps(input_path, original_fps, target_fps=30.0):
         return None
 
     print(f"✅ Success! Patched {patched_count} atoms.")
-    print(f"📁 Saved to: {output_path}")
+    print(f"📁 Saved to: {os.path.basename(output_path)}")
     return output_path
 
-def main_menu():
-    while True:
-        print("\n" + "="*50)
-        print("       FPS Metadata Patcher - Terminal Edition")
-        print("="*50)
-        print("1️⃣  Browse & Select MP4 File")
-        print("2️⃣  Set Original FPS & Patch to 30fps")
-        print("0️⃣  Exit")
-        print("-"*50)
-        choice = input("Press number and Enter: ").strip()
-
-        if choice == "1":
-            path = input("📂 Enter full path to MP4 file: ").strip()
-            if os.path.exists(path):
-                print(f"✅ Selected: {path}")
-                return path
-            else:
-                print("❌ File not found!")
-                continue
-
-        elif choice == "2":
-            print("Use option 1 first to select a file!")
-            continue
-
-        elif choice == "0":
-            print("👋 Goodbye!")
-            sys.exit(0)
-        else:
-            print("❌ Invalid option!")
-
 def main():
-    file_path = None
+    print("\n" + "="*45)
+    print("   🎬 FPS Metadata Patcher for TikTok")
+    print("   a-Shell Edition - Auto File Picker")
+    print("="*45)
     
-    # First run - immediately ask for file
-    print("\n🎬 FPS Patcher for TikTok")
-    print("="*40)
-    print("Press 1️⃣  to select MP4 file")
-    print("Press 0️⃣  to exit")
+    # Automatically open file picker
+    file_path = pick_file()
     
-    first_choice = input("\nYour choice: ").strip()
-    
-    if first_choice == "0":
-        print("👋 Goodbye!")
+    if not file_path:
+        print("\n❌ Operation cancelled. Run again to select a file.")
         return
     
-    if first_choice == "1":
-        path = input("📂 Enter full path to MP4 file: ").strip()
-        if os.path.exists(path) and path.lower().endswith('.mp4'):
-            file_path = path
-            print(f"✅ Selected: {os.path.basename(path)}")
-        else:
-            print("❌ Invalid MP4 file!")
-            return
-    else:
-        print("❌ Please press 1 to select a file!")
-        return
-
-    # Ask for FPS
-    while True:
-        fps_input = input("\n🎯 Enter original FPS (e.g., 60): ").strip()
-        try:
-            original_fps = float(fps_input)
-            if original_fps > 0:
-                break
-            else:
-                print("❌ Must be positive number!")
-        except ValueError:
-            print("❌ Please enter a number!")
-
-    print(f"\n⏳ Patching {os.path.basename(file_path)} from {original_fps}fps to 30fps...")
+    # Get original FPS
+    original_fps = get_fps()
+    
+    # Start patching
+    print(f"\n⚡ Patching from {original_fps}fps to 30fps...")
+    print("-"*45)
+    
     result = patch_video_fps(file_path, original_fps, 30.0)
     
     if result:
-        print("\n🎉 Done! Upload this file to TikTok.")
+        print("-"*45)
+        print("🎉 Done! Upload this new file to TikTok.")
+        print("   It will play smoothly at 30fps.")
     else:
-        print("\n❌ Patching failed. Check your file and FPS value.")
+        print("-"*45)
+        print("❌ Patching failed. Try a different MP4 file.")
 
 if __name__ == "__main__":
     main()
